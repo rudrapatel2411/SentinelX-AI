@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Analysis {
+  id                  String             @id // SX-YYYYMMDD-XXXXXX
+  type                String             // "file" | "message" | "url"
+  target              String             // Sanitized file name, URL, or message excerpt
+  riskScore           Int                // 0 - 100
+  classification      String             // "SAFE" | "SUSPICIOUS" | "DANGEROUS" | "UNKNOWN"
+  confidence          Float              // 0.0 - 1.0
+  confidenceLabel     String             // "High" | "Medium" | "Low"
+  
+  // AI Explanation fields
+  aiSummary           String?
+  aiThreatCategory    String?
+  aiReasons           String?            // JSON array string
+  aiRecommendedAction String?
+  aiWritingLikelihood Float?
+  aiAvailable         Boolean            @default(false)
+  
+  // Recommendations array string
+  recommendations     String?
+  
+  // Full metadata JSON string
+  metadata            String?
+  
+  // Relational items
+  indicators          ThreatIndicator[]
+  threatIntelResults  ThreatIntelResult[]
+  
+  createdAt           DateTime           @default(now())
+
+  @@index([createdAt])
+  @@index([type])
+  @@index([classification])
+  @@index([riskScore])
+}
+
+model ThreatIndicator {
+  id          String   @id @default(cuid())
+  analysisId  String
+  analysis    Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  
+  indicatorId String   // e.g. "pdf.javascript", "url.brand_impersonation"
+  title       String
+  description String
+  severity    String   // "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+  weight      Int
+  confidence  Float
+  category    String   // "threat_intelligence" | "brand_impersonation" | etc.
+  source      String   // "SentinelX PDF Analyzer", "VirusTotal", etc.
+  mitigating  Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+
+  @@index([analysisId])
+}
+
+model ThreatIntelResult {
+  id              String   @id @default(cuid())
+  analysisId      String
+  analysis        Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  
+  sourceName      String   // "VirusTotal", "Google Safe Browsing"
+  status          String   // "CHECKED_CLEAN", "THREAT_DETECTED", "UNAVAILABLE", "SKIPPED"
+  details         String?
+  positives       Int?
+  total           Int?
+  detectedThreats String?  // JSON array string
+  scanDate        DateTime @default(now())
+
+  @@index([analysisId])
+}
