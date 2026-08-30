@@ -1,5 +1,5 @@
 import { prisma, isDatabaseAvailable } from "@/lib/db/prisma";
-import { Prisma } from "@prisma/client";
+import type { Analysis, ThreatIndicator, ThreatIntelResult } from "@prisma/client";
 import {
   CommonAnalysisResult,
   SecurityIndicator,
@@ -11,12 +11,10 @@ import {
   ThreatIntelStatus,
 } from "@/lib/types/security";
 
-export type AnalysisRecordWithRelations = Prisma.AnalysisGetPayload<{
-  include: {
-    indicators: true;
-    threatIntelResults: true;
-  };
-}>;
+export type AnalysisRecordWithRelations = Analysis & {
+  indicators: ThreatIndicator[];
+  threatIntelResults: ThreatIntelResult[];
+};
 
 export interface DashboardStats {
   total: number;
@@ -138,7 +136,7 @@ export class AnalysisStorage {
       });
 
       if (!record) return null;
-      return this.mapRecordToResult(record);
+      return this.mapRecordToResult(record as AnalysisRecordWithRelations);
     } catch {
       return null;
     }
@@ -213,7 +211,7 @@ export class AnalysisStorage {
   }
 
   private static mapRecordToResult(record: AnalysisRecordWithRelations): CommonAnalysisResult {
-    const indicators: SecurityIndicator[] = (record.indicators || []).map((i) => ({
+    const indicators: SecurityIndicator[] = (record.indicators || []).map((i: ThreatIndicator) => ({
       id: i.indicatorId,
       title: i.title,
       description: i.description,
@@ -225,7 +223,7 @@ export class AnalysisStorage {
       mitigating: i.mitigating,
     }));
 
-    const threatIntel: ThreatIntelSourceResult[] = (record.threatIntelResults || []).map((t) => {
+    const threatIntel: ThreatIntelSourceResult[] = (record.threatIntelResults || []).map((t: ThreatIntelResult) => {
       let detectedThreats: string[] = [];
       try {
         detectedThreats = t.detectedThreats ? JSON.parse(t.detectedThreats) : [];
