@@ -1,5 +1,22 @@
 import { prisma, isDatabaseAvailable } from "@/lib/db/prisma";
-import { CommonAnalysisResult, SecurityIndicator, ThreatIntelSourceResult, RiskFactorBreakdown } from "@/lib/types/security";
+import { Prisma } from "@prisma/client";
+import {
+  CommonAnalysisResult,
+  SecurityIndicator,
+  ThreatIntelSourceResult,
+  RiskFactorBreakdown,
+  RiskClassification,
+  Severity,
+  IndicatorCategory,
+  ThreatIntelStatus,
+} from "@/lib/types/security";
+
+export type AnalysisRecordWithRelations = Prisma.AnalysisGetPayload<{
+  include: {
+    indicators: true;
+    threatIntelResults: true;
+  };
+}>;
 
 export interface DashboardStats {
   total: number;
@@ -95,7 +112,9 @@ export class AnalysisStorage {
         },
       });
 
-      const items: CommonAnalysisResult[] = records.map((r) => this.mapRecordToResult(r));
+      const items: CommonAnalysisResult[] = records.map((r: AnalysisRecordWithRelations) =>
+        this.mapRecordToResult(r)
+      );
       return { items, dbConnected: true };
     } catch {
       return { items: [], dbConnected: false };
@@ -162,17 +181,21 @@ export class AnalysisStorage {
         where: { mitigating: false },
       });
 
-      const categoryBreakdown = indicators.map((g) => ({
-        category: g.category,
-        count: g._count.category,
-      }));
+      const categoryBreakdown = indicators.map(
+        (g: { category: string; _count: { category: number } }) => ({
+          category: g.category,
+          count: g._count.category,
+        })
+      );
 
       return {
         total,
         safe,
         suspicious,
         dangerous,
-        recentAnalyses: recent.map((r) => this.mapRecordToResult(r)),
+        recentAnalyses: recent.map((r: AnalysisRecordWithRelations) =>
+          this.mapRecordToResult(r)
+        ),
         categoryBreakdown,
         isDatabaseConnected: true,
       };
@@ -189,21 +212,20 @@ export class AnalysisStorage {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private static mapRecordToResult(record: any): CommonAnalysisResult {
-    const indicators: SecurityIndicator[] = (record.indicators || []).map((i: any) => ({
+  private static mapRecordToResult(record: AnalysisRecordWithRelations): CommonAnalysisResult {
+    const indicators: SecurityIndicator[] = (record.indicators || []).map((i) => ({
       id: i.indicatorId,
       title: i.title,
       description: i.description,
-      severity: i.severity as any,
+      severity: i.severity as Severity,
       weight: i.weight,
       confidence: i.confidence,
-      category: i.category as any,
+      category: i.category as IndicatorCategory,
       source: i.source,
       mitigating: i.mitigating,
     }));
 
-    const threatIntel: ThreatIntelSourceResult[] = (record.threatIntelResults || []).map((t: any) => {
+    const threatIntel: ThreatIntelSourceResult[] = (record.threatIntelResults || []).map((t) => {
       let detectedThreats: string[] = [];
       try {
         detectedThreats = t.detectedThreats ? JSON.parse(t.detectedThreats) : [];
@@ -212,7 +234,7 @@ export class AnalysisStorage {
       }
       return {
         name: t.sourceName,
-        status: t.status as any,
+        status: t.status as ThreatIntelStatus,
         details: t.details || undefined,
         positives: t.positives ?? undefined,
         total: t.total ?? undefined,
@@ -248,9 +270,9 @@ export class AnalysisStorage {
       type: record.type as "file" | "message" | "url",
       target: record.target,
       riskScore: record.riskScore,
-      classification: record.classification as any,
+      classification: record.classification as RiskClassification,
       confidence: record.confidence,
-      confidenceLabel: record.confidenceLabel as any,
+      confidenceLabel: record.confidenceLabel as "High" | "Medium" | "Low",
       indicators,
       riskFactors,
       threatIntel,
